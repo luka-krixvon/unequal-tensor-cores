@@ -1,0 +1,24 @@
+# model weights and checkpoints — never commit
+models/
+*.safetensors
+*.bin
+*.pt
+*.gguf
+
+# large or machine-local artifacts
+*.tar.gz
+*.pdf
+.hf/
+__pycache__/
+*.pyc
+sweeps/
+.venv*/
+
+# compiled microbenchmarks
+imma_peak
+lt_probe
+*.o
+
+# run outputs (added deliberately when they become results)
+*_smoke.json
+ncu_verdict_*.log

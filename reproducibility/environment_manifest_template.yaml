@@ -1,0 +1,67 @@
+schema_version: 1
+captured_at_utc: TBD
+operator: TBD
+
+provider:
+  name: vast_ai
+  instance_id: TBD
+  offer_id: TBD
+  price_usd_per_node_hour: TBD
+  interruptible: TBD
+  offer_evidence_path: TBD
+
+host:
+  hostname_hash: TBD
+  cpu_model: TBD
+  cpu_sockets: TBD
+  numa_nodes: TBD
+  ram_gib: TBD
+  local_nvme_gib: TBD
+  filesystem: TBD
+
+gpu:
+  product_name: TBD
+  count: 8
+  form_factor: SXM_or_HGX_TBD
+  memory_mib_per_gpu: TBD
+  uuid_hashes: []
+  vbios_versions: []
+  power_limit_w: TBD
+  application_clock_mhz: TBD
+  ecc_mode: TBD
+
+fabric:
+  nvlink_generation: TBD
+  nvswitch: TBD
+  topo_m_output_path: TBD
+  nvlink_status_path: TBD
+
+software:
+  os_release: TBD
+  kernel: TBD
+  nvidia_driver: TBD
+  cuda: TBD
+  nccl: TBD
+  fabric_manager: TBD
+  python: TBD
+  pytorch: TBD
+  backend_name: TBD
+  backend_git_commit: TBD
+  container_image: TBD
+  container_digest: TBD
+  cutlass_commit: TBD
+
+profiling:
+  nsight_systems_version: TBD
+  nsight_compute_version: TBD
+  dcgm_version: TBD
+  performance_counters_available: TBD
+
+thermal_baseline:
+  ambient_or_inlet_c: TBD
+  idle_gpu_temp_c: []
+  idle_power_w: []
+  throttling_detected: TBD
+
+notes: TBD
+

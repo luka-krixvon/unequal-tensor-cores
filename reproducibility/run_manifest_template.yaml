@@ -1,0 +1,78 @@
+schema_version: 1
+run_id: TBD
+experiment_id: TBD
+started_at_utc: TBD
+ended_at_utc: TBD
+environment_manifest: TBD
+git_commit: TBD
+
+model:
+  repo_id: TBD
+  revision: TBD
+  local_checkpoint_hash: TBD
+  architecture: TBD
+  tokenizer_revision: TBD
+  parameter_count: TBD
+
+quantization:
+  label: BF16_or_INT8_W8A8_or_FP8_W8A8_or_NVFP4
+  source_bf16_parent_revision: TBD
+  recipe_path: TBD
+  recipe_hash: TBD
+  weight_dtype: TBD
+  activation_dtype: TBD
+  kv_cache_dtype: TBD
+  granularity: TBD
+  block_or_group_size: TBD
+  scaling_method: TBD
+  calibration_dataset_revision: TBD
+  calibration_sample_ids_path: TBD
+  calibration_seed: TBD
+
+serving:
+  backend: TBD
+  command_path: TBD
+  tensor_parallel: TBD
+  pipeline_parallel: TBD
+  pd_split: TBD
+  scheduler_config: TBD
+  cuda_graphs: TBD
+  chunked_prefill: TBD
+  prefix_cache: TBD
+  speculative_or_mtp: false
+
+workload:
+  phase: prefill_or_decode_or_mixed_or_layer
+  dataset_or_trace_revision: TBD
+  prompt_ids_hash: TBD
+  input_length_tokens: TBD
+  output_length_tokens: TBD
+  ignore_eos: true
+  min_tokens: TBD
+  max_tokens: TBD
+  batch_or_concurrency: TBD
+  request_rate: TBD
+  warmup_requests: TBD
+
+measurement:
+  repeat_index: TBD
+  randomized_block: TBD
+  wall_time_s: TBD
+  raw_results_path: TBD
+  profiler_trace_path: TBD
+  telemetry_path: TBD
+  actual_kernel_evidence_path: TBD
+  fallback_detected: TBD
+  thermal_throttling_detected: TBD
+
+quality:
+  evaluation_config: TBD
+  raw_results_path: TBD
+  passed_predeclared_threshold: TBD
+
+cost:
+  billed_node_hours: TBD
+  estimated_usd: TBD
+
+exclusions_or_notes: TBD
+
