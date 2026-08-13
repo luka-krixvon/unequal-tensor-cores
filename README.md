@@ -1,11 +1,11 @@
-# equal-bytes
+# unequal-tensor-cores
 
 Reproducibility artifacts for a measurement study of quantization-format
 crossovers across NVIDIA H200 and Blackwell Ultra B300.
 
 Two outputs share this repository:
 
-1. **Audit report** (submitted to arXiv 2026-08-12, `submit/7941203`) —
+1. **Audit report** — [arXiv:2608.11693](https://arxiv.org/abs/2608.11693) [cs.AR] —
    *Spec Sheets Are Not Kernels: An ISA- and Source-Level Audit of INT8
    Availability on NVIDIA Blackwell Ultra*. A documentary audit: no
    performance measurements, every claim pinned to an official document,
@@ -72,7 +72,17 @@ produced.
 
 ## Citation
 
-Citation metadata will be added once the audit report is announced on arXiv.
+```bibtex
+@misc{chen2026specsheets,
+  title  = {Spec Sheets Are Not Kernels: An ISA- and Source-Level Audit
+            of INT8 Availability on NVIDIA Blackwell Ultra},
+  author = {Chen, Teng-Ruei},
+  year   = {2026},
+  eprint = {2608.11693},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AR}
+}
+```
 
 ## License
 
