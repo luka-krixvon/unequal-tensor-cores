@@ -119,3 +119,15 @@ docker run --rm --gpus '"device=0"' -v $PWD:/w -w /w nvidia/cuda:13.0.0-devel-ub
 ## 帶回來的檔案清單
 
 `env_manifest_gate1.yaml`、`imma_peak_b300.log`、`ncu_verdict_*.log`、`smoke_default.log`、`smoke_triton.log`、`ncu_vllm_triton.log`、`cublaslt_b300.log`——全部進 `reproducibility/`，並更新 claim ledger 的 GATE1-* 列與 decision log。
+
+---
+
+## 附錄：Vast.ai 容器模式適配（2026-08-13）
+
+Vast.ai instance 本身是容器（非 VM），原 runbook 的 docker-in-docker 步驟改為：
+
+1. **Instance 映像**：`nvidia/cuda:13.0.0-devel-ubuntu24.04`（Step 1/5 的 imma_peak 與 cublaslt probe 直接在 instance 內 build，`ARCH=sm_103a`）。
+2. **Step 0 profiler 檢查提前為第一動作**：`ncu --version` 確認存在（devel 映像含 toolkit；若無 → `apt install nsight-compute` 自 NVIDIA repo），然後對任意小 kernel 跑 `ncu --metrics sm__cycles_elapsed.sum`。出現 `ERR_NVGPUCTRPERM` = 房東主機未開放 counters 且容器內無法補救（需 host 端 `NVreg_RestrictProfilingToAdminUsers=0`）→ **立即銷毀 instance 換供應商（Verda VM）**，不做任何後續步驟。
+3. **Step 2/3（vLLM fixture、Triton 逃生路徑）**：容器內無 docker，兩案：(a) 於同機另開第二個 instance、映像直接填釘住的 digest `vllm/vllm-openai@sha256:0a51ea5b4ae2dc5d81890e5173f54203d2a3ae0cfffe51b8fd2afd4391bfd967`；或 (b) 單 instance 內 `pip install vllm==0.27.1`（版本釘住但失去 image digest 等值性——manifest 須如實記錄為 pip 安裝，等值性主張降為版本級）。優先 (a)。
+4. **Step 4（ncu 對 Triton kernel 判定）**：在 vLLM instance 內 apt 安裝 nsight-compute 後對 serving process 附掛，或以 (a) 案在 devel instance 內以 `torch` + Triton 復現該 kernel 再判定。若兩者皆受權限阻擋而 Step 0 曾通過，記錄差異（process-attach 權限與 counter 權限不同層）。
+5. 其餘（環境 manifest、溫度基線、決策樹）不變。
