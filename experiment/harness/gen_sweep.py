@@ -14,7 +14,28 @@ deterministic means the sweep itself is part of the pre-registered design.
 import csv, json, hashlib, os, sys, itertools
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MATRIX = os.path.join(HERE, "..", "config_matrix.csv")
+def _resolve_matrix():
+    """Locate config_matrix.csv without ever silently reading a stale copy.
+
+    Search order: same directory as this script, then the parent directory
+    (the repo layout experiment/harness/ -> experiment/). The resolved path
+    and its SHA-256 are printed on every run so a mismatch against the
+    pre-registration cannot go unnoticed -- a flat deployment (e.g. a VM
+    working directory) previously resolved ".." to an unrelated directory
+    and read an out-of-date matrix while every SHA check passed.
+    """
+    import hashlib
+    for cand in (os.path.join(HERE, "config_matrix.csv"),
+                 os.path.join(HERE, "..", "config_matrix.csv")):
+        if os.path.isfile(cand):
+            p = os.path.realpath(cand)
+            h = hashlib.sha256(open(p, "rb").read()).hexdigest()[:16]
+            print(f"[gen_sweep] matrix: {p}\n[gen_sweep] sha256[:16]: {h}")
+            return p
+    raise SystemExit("config_matrix.csv not found beside or above " + HERE)
+
+
+MATRIX = _resolve_matrix()
 OUT = os.path.join(HERE, "sweeps")
 
 # ---- model dims -----------------------------------------------------------

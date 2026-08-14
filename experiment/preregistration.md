@@ -14,7 +14,7 @@ v2 取代同日 v1：v1 完成後立即接受三線敵對審查（洩漏／估�
 |---|---|---|
 | `experiment/harness/changepoint.py` | `a8b58ce3859a544f` | 估計器 v2（censored-inclusive CI、多交叉回報、失敗規則、paired block bootstrap、knee 存在性檢定、penalty 傳播） |
 | `experiment/harness/validate_synthetic.py` | `6216d8c9e09088d0` | 驗收 v2（真實幾何 G13/G9/G9r5/G6、σ∈{.05,.10,.15}、S1–S10、K1–K2） |
-| `experiment/harness/gen_sweep.py` | `6198eb61a6cf3f71` | sweep 展開器 |
+| `experiment/harness/gen_sweep.py` | `a77697682c3029f4` | sweep 展開器（A-7：矩陣路徑解析明示化＋執行時印出所讀矩陣之路徑與 SHA；展開邏輯未變） |
 | `experiment/config_matrix.csv` | `949d996a5c055e2e` | 實驗矩陣 v4（28 實驗、14,691 runs；v3 基礎上加入 REQUANT-B300-{DECODE,PREFILL} 診斷臂）。名目網格，實際執行受 §3.5 容量包絡裁切 |
 | `experiment/harness/capacity_envelope.py` | `580105ebb64e3018` | §3.5 容量包絡規則之實作（B_max、crop_grid、infeasible 記帳；含 self-test） |
 | `experiment/harness/qwen3_32b_config.json` | `97e295b632839357` | 主模型架構參數 |
@@ -204,3 +204,6 @@ v1→v2 全面修訂，動因＝預資料敵對審查（4 FATAL/17 MAJOR/6 MINOR
 
 ### A-6（A 類，2026-08-14）
 釘定 §7 quality gates 之評測腳本：`experiment/harness/quality_gates.py`，SHA-256[:16] `41b922dd7d2ce1d5`，並列入 §0。此為 v2 §7 所要求之「首次使用前補入」義務之履行，非新增自由度：三個 gate 的資料集 revision、window/stride、prompt 來源規則（A-3）、needle 句與問句、門檻值均已於 v2/v3 鎖定，本腳本僅為其實作。管線已於 sm_89 代理硬體驗證可執行（三 gate exit 0；該次比較使用兩個不同來源的 1B fixture，非同一 BF16 母模型，故其數值非有效 gate 結果，僅驗證管線）。尚無任何目標硬體（H200/B300）quality-gate 數據。
+
+### A-7（A 類，2026-08-14，缺陷修復）
+`gen_sweep.py` 重釘為 `a77697682c3029f4`（原 `6198eb61a6cf3f71`）。**動因＝實際發現的靜默錯誤輸入缺陷**：原程式寫死 `MATRIX = HERE/../config_matrix.csv`（配合 repo 之 `experiment/harness/` 佈局）；在扁平部署（代理 VM 的工作目錄）中 `..` 解析至無關目錄，讀到一份 2026-08-12 遺留的 v3 舊矩陣（26 列、`a99071715d5e5992`），產生 14,451 runs 而非 v4 的 14,691——**且所有 SHA 檢查皆通過，因為被檢查的檔案不是被讀取的那一份**。修法：路徑解析改為「先同目錄、再上層」，且每次執行印出實際所讀矩陣之絕對路徑與 SHA-256[:16]。展開邏輯一字未動，同一矩陣之輸出不變（本機重跑仍為 14,691，矩陣 SHA 印為 `949d996a5c055e2e`）。舊矩陣殘留已自 VM 移除。教訓：SHA 釘定只在「被釘的檔案就是被讀的檔案」時有效；凡讀取外部輸入之腳本，執行時必須自報所讀路徑與雜湊。
