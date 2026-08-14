@@ -18,6 +18,7 @@ v2 取代同日 v1：v1 完成後立即接受三線敵對審查（洩漏／估�
 | `experiment/config_matrix.csv` | `949d996a5c055e2e` | 實驗矩陣 v4（28 實驗、14,691 runs；v3 基礎上加入 REQUANT-B300-{DECODE,PREFILL} 診斷臂）。名目網格，實際執行受 §3.5 容量包絡裁切 |
 | `experiment/harness/capacity_envelope.py` | `580105ebb64e3018` | §3.5 容量包絡規則之實作（B_max、crop_grid、infeasible 記帳；含 self-test） |
 | `experiment/harness/qwen3_32b_config.json` | `97e295b632839357` | 主模型架構參數 |
+| `experiment/harness/quality_gates.py` | `41b922dd7d2ce1d5` | §7 三個 quality gates 之實作（PPL／一致率／needle；含 A-3 之窗口切分規則） |
 
 驗證設定聲明：crossover 覆蓋率以鎖定之 B=1000 驗證；knee-CI 與 penalty 情境以 B=300、60–100 trials 驗證（覆蓋率標準誤 4–6%，驗收帶已吸收），此為預先聲明的驗證設定。
 
@@ -153,7 +154,7 @@ Predictor ＝ **確定性機制模型，無可調超參數**：對每（hardware
 資料集：`Salesforce/wikitext`，config `wikitext-2-raw-v1`，**test split**，dataset revision `b08601e04326c79dfdd32d625aee71d232d685c3`。
 - **PPL**：串接全 test split，context window 4096、**非重疊 stride**，token-level NLL 之 exp；相對增幅 INT8/FP8 ≤2%、NVFP4 ≤5%。
 - **一致率**：prompts＝該 test split 全文串接後（保留原始換行）以 GPT-2 tokenizer 切成不重疊的 320-token 窗口，**依序取前 200 個完整窗口**，每個窗口取**前 64 tokens** 為 prompt（確定性；prompt 清單 SHA 隨 artifacts 發布）。〔A-3 修正：v2 原寫「前 200 篇 ≥256 tokens 之文件」，但該 split 僅含 63 篇頂層文件，物理上不可能取 200 篇；改為窗口切分，維持「確定性、可重算、涵蓋整個 split」的原意。〕greedy 256 tokens；**每 prompt 分數＝首次分歧前吻合 tokens 數 ÷256，gate 於 200 篇平均**；INT8/FP8 ≥95%、NVFP4 ≥90%。**BF16 參照**＝H200、釘住之 vLLM image、enforce_eager、greedy；各（arm×hardware×backend）對同一參照計分；另報 BF16-on-B300 對參照的一致率作為跨硬體數值基線。
-- **Needle-in-haystack**：haystack＝同資料集 test split 串接；needle＝固定句 "The secret checkpoint code is 731942."（於 depth 處插入）；depth {0,10,…,100}%×length {8k,16k,32k}＝33 cells、每 cell 1 次確定性 greedy；問句固定 "What is the secret checkpoint code?"；通過＝回答含子字串 "731942"；分數＝33 cells 通過率；降幅 ≤5 pts（相對同硬體 BF16 參照，參照分數一併列報）。評測腳本 SHA 於首次使用前以 A 類 Amendment 補入。
+- **Needle-in-haystack**：haystack＝同資料集 test split 串接；needle＝固定句 "The secret checkpoint code is 731942."（於 depth 處插入）；depth {0,10,…,100}%×length {8k,16k,32k}＝33 cells、每 cell 1 次確定性 greedy；問句固定 "What is the secret checkpoint code?"；通過＝回答含子字串 "731942"；分數＝33 cells 通過率；降幅 ≤5 pts（相對同硬體 BF16 參照，參照分數一併列報）。評測腳本＝`experiment/harness/quality_gates.py`（SHA-256[:16] `41b922dd7d2ce1d5`，見 §0；A-6 釘定，先於任何目標硬體 quality-gate 執行）。
 - Gate 範圍：逐（arm×hardware×實際 benchmark 之 backend）評定；某硬體上未過 → 僅該硬體之等品質比較排除該臂，全部 gate 數字照報。INT8→FP8-requant 臂（§5.5）之 gates 於其任何吞吐量測之前完成。
 
 ## 8. Matched-quantization recipes
@@ -200,3 +201,6 @@ v1→v2 全面修訂，動因＝預資料敵對審查（4 FATAL/17 MAJOR/6 MINOR
 
 ### A-5（A 類，2026-08-13，A-4 後續：artifacts 重釘）
 矩陣 v4（28 實驗、14,691 runs）：新增 REQUANT-B300-DECODE 與 REQUANT-B300-PREFILL（P2 診斷、§7 gates 先行、EXCLUDED-FROM-PREDICTOR、NCU 驗證 execution=FP8）。新增 `capacity_envelope.py`（§3.5 之 B_max/crop_grid 實作，self-test 重現預資料試算）。§0 SHA 已更新：matrix `949d996a5c055e2e`、capacity_envelope `580105ebb64e3018`；estimator 與驗收套件未動（SHA 不變）。gen_sweep.py 未修改（新列由既有 schema 展開）。
+
+### A-6（A 類，2026-08-14）
+釘定 §7 quality gates 之評測腳本：`experiment/harness/quality_gates.py`，SHA-256[:16] `41b922dd7d2ce1d5`，並列入 §0。此為 v2 §7 所要求之「首次使用前補入」義務之履行，非新增自由度：三個 gate 的資料集 revision、window/stride、prompt 來源規則（A-3）、needle 句與問句、門檻值均已於 v2/v3 鎖定，本腳本僅為其實作。管線已於 sm_89 代理硬體驗證可執行（三 gate exit 0；該次比較使用兩個不同來源的 1B fixture，非同一 BF16 母模型，故其數值非有效 gate 結果，僅驗證管線）。尚無任何目標硬體（H200/B300）quality-gate 數據。
