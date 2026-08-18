@@ -1,4 +1,4 @@
-# When Equal Bytes Meet Unequal Tensor Cores: Measuring Quantization-Format Crossovers on H200 and B300
+# When Equal Bytes Meet Unequal Tensor Cores: Measuring Quantization-Format Boundaries on H200 and B300
 
 ![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)
 ![Docs: CC BY 4.0](https://img.shields.io/badge/docs-CC%20BY%204.0-blue.svg)
@@ -10,7 +10,7 @@
 ![Status: pre-registered, pre-data](https://img.shields.io/badge/status-pre--registered%2C%20pre--data-brightgreen.svg)
 [![arXiv](https://img.shields.io/badge/arXiv-2608.11693-b31b1b.svg)](https://arxiv.org/abs/2608.11693)
 
-> Reproducibility companion for the audit report **"Spec Sheets Are Not Kernels: An ISA- and Source-Level Audit of INT8 Availability on NVIDIA Blackwell Ultra"** ([arXiv:2608.11693](https://arxiv.org/abs/2608.11693)), and the pre-registration home of the companion measurement study **"When Equal Bytes Meet Unequal Tensor Cores"** (in progress). The question behind both: INT8 and FP8 occupy exactly one byte per value, yet B300 gives them a 30:1 dense-compute ratio — so *where does the throughput crossover sit, and what must you measure to predict it?*
+> Reproducibility companion for the audit report **"Spec Sheets Are Not Kernels: An ISA- and Source-Level Audit of INT8 Availability on NVIDIA Blackwell Ultra"** ([arXiv:2608.11693](https://arxiv.org/abs/2608.11693)), and the pre-registration home of the companion measurement study **"When Equal Bytes Meet Unequal Tensor Cores"** (in progress). The question behind both: INT8 and FP8 occupy exactly one byte per value, yet B300 gives them a 30:1 dense-compute ratio — so *where does the boundary between formats fall, and what must you measure to predict it?*
 
 ## TL;DR
 
@@ -43,7 +43,17 @@ The obvious way to verify "native INT8 execution" on `sm_103` — grep profiler 
 
 ## The measurement study (pre-registered, in progress)
 
-Format selection is framed as a policy problem: π: (phase, load regime) → (format, config), minimizing GPU-seconds per token subject to SLO and quality gates. The baselines are **nested policy classes** — Π₀ (one global format, the industry default) ⊂ Π₁ (per-phase) ⊂ Π₂ (per-phase × regime) — so the study reports both the oracle value of enlarging the decision space and the regret of a cheap, mechanistic, hyperparameter-free predictor inside it. Four pre-registered hypotheses (H1 interaction, H2 crossover shift, H3 predictor vs. baselines on held-out points, H4 goodput under SLOs); estimator and protocol are locked in [`experiment/preregistration.md`](experiment/preregistration.md).
+Format selection is framed as a policy problem: π: (phase, load regime) → (format, config), minimizing GPU-seconds per token subject to SLO and quality gates. The baselines are **nested policy classes** — Π₀ (one global format, the industry default) ⊂ Π₁ (per-phase) ⊂ Π₂ (per-phase × regime) — so the study reports both the oracle value of enlarging the decision space and the regret of a cheap, mechanistic, hyperparameter-free predictor inside it. Four pre-registered hypotheses (H1 interaction, H2 boundary shift across hardware, H3 predictor vs. baselines on held-out points, H4 goodput under SLOs); estimator and protocol are locked in [`experiment/preregistration.md`](experiment/preregistration.md).
+
+A boundary is not always a crossing, and the protocol says so before the data exists. Ridges are computed **per format**: on HGX B300 at 7.7 TB/s the FP8 ridge is ~584 op/B while the native-INT8 ridge is ~19.5 op/B, so an INT8 linear layer is already compute-bound near concurrency 10 while FP8 stays memory-bound across the whole grid. Section 1.0 of the pre-registration therefore registers three boundary shapes, and the estimator reports which one it found:
+
+| Shape | Where it is expected | Estimator status | Reported quantity |
+| --- | --- | --- | --- |
+| Dominance + onset | INT8 vs. FP8 on B300 | `below` / `above` + knee | divergence-onset location and CI |
+| Near-parity | INT8 vs. FP8 on H200 (same silicon peak) | `no-crossing-indicated` | tie decision; any gap is a kernel effect |
+| Crossing | NVFP4 vs. FP8 on B300 (open question) | `crossing` | crossover location and CI |
+
+An earlier framing expected the B300 decode boundary to be right-censored beyond concurrency 256; that expectation was computed from the FP8 ridge alone, and it was retracted pre-data in amendment A-4.
 
 ```mermaid
 flowchart TD
