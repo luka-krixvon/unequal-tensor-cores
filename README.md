@@ -69,12 +69,23 @@ flowchart TD
     classDef pending fill:#eeeeee,stroke:#999999,color:#1a1a2e
 ```
 
+## How the protocol is enforced (and two ways it was not)
+
+Pinning artifacts by SHA-256 only helps when the pinned file is also the file the code reads *and acts on correctly*. Two failures of exactly that shape were found by external re-review, reproduced here, and fixed — all before any target-hardware data existed:
+
+- The v3 protocol split the microbenchmark rows into a Qwen row (training-eligible) and a 405B row (held-out), and recorded the shape hold-out as fixed. The generator still selected shape families by experiment *tier*, so every Qwen row expanded 1,820 Llama-405B specs — the hold-out itself — while the 405B rows expanded none at all. Shape families now come from the row's declared model (amendment A-8).
+- The data-role firewall existed only in prose: nothing in the generated specs marked which cells a predictor may train on, and the off-grid hold-out points named in the protocol were never generated. Every spec now carries `data_role`, with `heldout_reason` for the per-axis buckets (A-8/A-9).
+
+The generator now refuses to run when the matrix digest does not match the pinned value, and the acceptance suite exits non-zero on failure: a digest nobody compares, and a red test nothing blocks on, are not controls. The suite also seeded from `hash()`, which Python salts per process — so its pinned digest never made its results reproducible. It now seeds from SHA-256, and the re-run is byte-identical across two machines.
+
+Adding a penalty-corrected knee estimator surfaced a hazard in the method itself: a load-dependent penalty is curved in log-load, so dividing by (1−P) can *manufacture* a knee. A pure power law that the raw estimator correctly calls `no-knee` becomes a knee at 19.7 under a 0.05→0.60 penalty ramp. Onsets that appear only after correction are flagged and excluded from the hypothesis.
+
 ## Stage-by-stage
 
 | Stage / file | Role | Inputs → outputs |
 | --- | --- | --- |
 | `experiment/preregistration.md` | Locked protocol: hypotheses, held-out splits, baselines, metrics, tie/censoring rules, amendment governance | — (normative) |
-| `experiment/config_matrix.csv` | Design matrix: 26 experiments across hardware × format × phase × regime | matrix → 14,451 run specs |
+| `experiment/config_matrix.csv` | Design matrix: 30 experiments across hardware × format × phase × regime | matrix → 19,233 run specs, each tagged with its data role |
 | `experiment/harness/gen_sweep.py` | Deterministic sweep expander | matrix → `sweeps/*.jsonl` |
 | `experiment/harness/changepoint.py` | Crossover / knee estimators: paired block bootstrap, censored-draws-as-±inf CIs, multiple-crossing reporting, penalty propagation | median curves → estimates + CIs |
 | `experiment/harness/validate_synthetic.py` | Acceptance suite: 19 pre-stated criteria over real grid geometries and hard scenarios | synthetic truth → PASS/FAIL |
@@ -87,7 +98,7 @@ flowchart TD
 ```
 experiment/
   preregistration.md          locked 2026-08-12 (tag prereg-v2-locked)
-  config_matrix.csv           26 experiments
+  config_matrix.csv           30 experiments
   harness/
     changepoint.py            estimators (pure stdlib)
     validate_synthetic.py     19-criteria acceptance suite (pure stdlib)
