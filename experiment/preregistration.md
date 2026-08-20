@@ -248,4 +248,12 @@ v1→v2 全面修訂，動因＝預資料敵對審查（4 FATAL/17 MAJOR/6 MINOR
 
 **A-2 驗證數字取代（重要）**：A-2 所引之 19/19 係以 `hash(name)` 為 seed 取得，而 `hash()` 逐行程加鹽，故**該組數字無法由釘定的 SHA 重現**（已實測同一輸入兩次得 7589 與 19781）。A-9 以 SHA-256 導出之固定 seed 重跑，仍為 **19/19 全過**（`reproducibility/synthetic_validation_a9_2026-08-20.log`）：S1 六幾何誤差 0.027–0.089／覆蓋 0.90–0.96；S2 自信假交叉 0.015；S3 0.028；S4 近切線 100% 帶旗標（文件化解析度極限）；S5 0.119／knee 偏差 0.144；S6 雙交叉偵測 1.00、首交叉誤差 0.020；S7 覆蓋 0.94；S8 penalty 傳播覆蓋 0.94；S9 純冪律 no-knee 0.98；S10 近邊緣覆蓋 0.96；K1／K2 達標。**已驗證跨機器可重現**（本機與 `gpu-worker-A` 之 S1-G13 輸出逐位相同）。A-2 之舊數字保留於歷史並在此標明不可重現，不得再作為驗證證據引用。
 
-**§1.2 簽章缺口（未解決，Predictor Freeze 前必須處理）**：`prereg-v3-locked` 為 **unsigned** annotated tag（GitHub API `verification.verified=false, reason=unsigned`），而 §1.2 明文要求「推送至公開 git remote 的 **signed tag**，或 OSF registration」。unsigned tag ＋ Release 可證存在時點（v3 Release created_at 2026-08-13T07:19:41Z），但**不滿足 §1.2 之簽章要求**。Predictor Freeze 執行前須先設定 GPG／SSH 簽章或改用 OSF，否則該次凍結按本協定無效。另更正：2026-08-18 之覆核 prompt 曾將 `prereg-v2-locked` 的 05:56:59Z 誤植為 v3 之時間戳；decision log 原始記載正確。
+**§1.2 簽章缺口（A-10 已部分關閉，見下）**：`prereg-v3-locked` 為 **unsigned** annotated tag（GitHub API `verification.verified=false, reason=unsigned`），而 §1.2 明文要求「推送至公開 git remote 的 **signed tag**，或 OSF registration」。unsigned tag ＋ Release 可證存在時點（v3 Release created_at 2026-08-13T07:19:41Z），但**不滿足 §1.2 之簽章要求**。Predictor Freeze 執行前須先設定 GPG／SSH 簽章或改用 OSF，否則該次凍結按本協定無效。另更正：2026-08-18 之覆核 prompt 曾將 `prereg-v2-locked` 的 05:56:59Z 誤植為 v3 之時間戳；decision log 原始記載正確。
+
+### A-10（A 類，2026-08-20，§1.2 簽章機制建立）
+§1.2 要求 Predictor Freeze 的時間戳為「推送至公開 git remote 的 **signed tag**，或 OSF registration」。原 `prereg-v2-locked`／`prereg-v3-locked` 為 annotated 但 **unsigned**（GitHub API `verification.reason=unsigned`），僅以 Release 建立時點證明存在，不滿足簽章條款。已建立簽章機制並實測：
+
+- **簽章方式**：git SSH signing（`gpg.format=ssh`），使用既有之 RSA-4096 金鑰 `SHA256:j0dlLtk4YdGGX+Vh1n9wc+OrthviSa9oqJNILGOCRXY`（無新增金鑰；私鑰未離開本機，本專案任何流程皆不接觸私鑰內容）。`commit.gpgsign` **刻意不啟用**，避免影響其他 repo；簽章一律以 `-s` 明示。本機驗證檔 `~/.ssh/allowed_signers`。
+- **首個 signed tag**：`prereg-a9-signed`（tagger date 2026-08-20T09:05:28Z），attest A-8／A-9 後之狀態與八個 artifact 之 SHA。本機 `git tag -v` 回報 `Good "git" signature`。舊的兩個 unsigned tag **保留不動**（治理：不刪除既有 tag／Release）。
+- **目前狀態：簽章存在且本機可驗證，但第三方尚不可驗證**。GitHub 回報 `verified=false, reason=unknown_key`——該公鑰尚未在帳號註冊為 **signing key**（與認證金鑰為不同類別）。此步驟為帳號設定變更，且本機 `gh` token 缺 `admin:ssh_signing_key` scope，故**必須由專案負責人於 GitHub 帳號設定自行加入**。
+- **§1.2 之合規判定**：在公鑰註冊為 signing key、且 GitHub 對該 tag 回報 `verified=true` 之前，**簽章條款仍未滿足**，Predictor Freeze 不得執行。註冊完成後須重驗該 tag 之 verification 狀態並於 amendment 記錄，方可視為關閉。備援路徑：改以 OSF registration 作為時間戳來源（不需 GitHub 簽章）。
