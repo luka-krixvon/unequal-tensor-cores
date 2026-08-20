@@ -37,19 +37,84 @@ def b_max(m_kv_bytes: int, c_kv: int, isl: int, q: int) -> int:
     return int(m_kv_bytes // (c_kv * isl * q))
 
 
-def crop_grid(cells, m_kv_bytes: int, c_kv: int, q: int):
-    """Split grid cells into (feasible, infeasible) per the locked rule.
+def load_axis(spec):
+    """Parse a generated run spec's load field into (axis, integer value).
 
-    cells: iterable of dicts with integer keys 'concurrency' and 'isl'.
-    Returns (feasible, infeasible) lists; caller logs the infeasible list
-    verbatim into the run manifest (INFEASIBLE-BY-CAPACITY, not censored).
+    P0: crop_grid previously required integer keys 'concurrency'/'isl', but
+    gen_sweep emits load='concurrency=1' and isl='128' as strings, so the
+    envelope could not consume the pipeline it was written for. Normalise here
+    instead of expecting callers to hand-massage every spec.
+    """
+    load = spec.get("load")
+    if isinstance(load, str) and "=" in load:
+        axis, _, val = load.partition("=")
+        return axis, int(val)
+    return "concurrency", int(load)
+
+
+def resident_context(spec) -> int:
+    """Context length whose KV must be resident. Decode holds ISL+OSL, not ISL.
+
+    P0: the envelope previously sized decode cells on ISL alone, understating
+    resident KV by the whole generated sequence.
+    """
+    isl = int(spec["isl"]) if str(spec.get("isl", "")).isdigit() else 0
+    osl = int(spec["osl"]) if str(spec.get("osl", "")).isdigit() else 0
+    return isl + (osl if "decode" in str(spec.get("phase", "")) else 0)
+
+
+def crop_grid(cells, m_kv_bytes: int, c_kv: int, q: int, block: int = 16,
+              tp: int = 1):
+    """Split cells into (feasible, infeasible) per the locked rule.
+
+    Accepts either integer-keyed cells ({'concurrency','isl'}) or generated run
+    specs (load='concurrency=N', isl='128', osl=..., phase=...). KV is rounded
+    up to whole paged-attention blocks and divided by the tensor-parallel
+    degree, since each rank holds only its shard of the KV heads.
     """
     feasible, infeasible = [], []
     for c in cells:
-        limit = b_max(m_kv_bytes, c_kv, c["isl"], q)
-        (feasible if c["concurrency"] <= limit else infeasible).append(
-            {**c, "b_max": limit})
+        if "concurrency" in c and isinstance(c.get("isl"), int):
+            axis, val, S = "concurrency", c["concurrency"], c["isl"]
+        else:
+            axis, val = load_axis(c)
+            S = resident_context(c)
+        if axis not in ("concurrency", "batch") or S <= 0:
+            feasible.append({**c, "b_max": None,
+                             "capacity_note": "not-capacity-bound"})
+            continue
+        S_blocks = -(-S // block) * block          # round up to block multiple
+        limit = b_max(m_kv_bytes * max(tp, 1), c_kv, S_blocks, q)
+        rec = {**c, "b_max": limit, "resident_context": S_blocks}
+        if val <= limit:
+            feasible.append(rec)
+        else:
+            infeasible.append({**rec, "reason": "INFEASIBLE-BY-CAPACITY"})
     return feasible, infeasible
+
+
+def paired_feasible(cells_a, cells_b, *args, **kw):
+    """Intersection of two arms' feasible regions, per preregistration 3.5.
+
+    P0: the envelope only ever cropped a single arm, but the protocol requires
+    paired analysis on the INTERSECTION (a BF16-weights arm has a strictly
+    smaller feasible region than a W8 arm). Returns
+    (paired_feasible_a, paired_feasible_b, ledger) where ledger records every
+    dropped cell with the arm that made it infeasible.
+    """
+    fa, ia = crop_grid(cells_a, *args, **kw)
+    fb, ib = crop_grid(cells_b, *args, **kw)
+    def key(c):
+        return (c.get("experiment_id"), c.get("isl"), c.get("osl"),
+                c.get("load"), c.get("concurrency"))
+    ok = {key(c) for c in fa} & {key(c) for c in fb}
+    ledger = ([{**c, "dropped_by": "arm_a"} for c in ia] +
+              [{**c, "dropped_by": "arm_b"} for c in ib] +
+              [{**c, "dropped_by": "not-in-intersection",
+                "reason": "INFEASIBLE-BY-CAPACITY"}
+               for c in fa + fb if key(c) not in ok])
+    return ([c for c in fa if key(c) in ok],
+            [c for c in fb if key(c) in ok], ledger)
 
 
 def spec_preview(vram_gb: float, weights_gb: float, c_kv: int, q: int,

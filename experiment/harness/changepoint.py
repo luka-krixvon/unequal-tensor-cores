@@ -112,9 +112,21 @@ def crossover(x: Grid, reps_a: Reps, reps_b: Reps):
         status = "no-crossing-indicated"
     else:
         status = "below" if lo < hi else "above"
-    return {"status": status, "crossings": [], "n_crossings": 0,
-            "dropped_points": dropped,
-            "bound": xc[0] if status == "below" else xc[-1]}
+    out = {"status": status, "crossings": [], "n_crossings": 0,
+           "dropped_points": dropped}
+    # P0: 'no-crossing-indicated' must NOT inherit a direction. The previous
+    # ternary gave it xc[-1], i.e. the same bound as 'above', silently
+    # asserting a direction the status exists precisely to withhold.
+    if status == "below":
+        out["bound"] = xc[0]
+    elif status == "above":
+        out["bound"] = xc[-1]
+    # Dominance direction is a separate fact from where the crossing lies:
+    # report which arm leads at each end so callers never infer a winner from
+    # 'below'/'above', which encode only the side of the grid.
+    out["lead_sign"] = (1 if d[0] > 0 else -1 if d[0] < 0 else 0,
+                        1 if d[-1] > 0 else -1 if d[-1] < 0 else 0)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -161,8 +173,18 @@ def crossover_ci(x: Grid, reps_a: Reps, reps_b: Reps,
     ncens = sum(1 for v in draws if v in (NEG_INF, POS_INF))
     lo_v = draws[int(len(draws) * (alpha / 2))]
     hi_v = draws[min(len(draws) - 1, int(len(draws) * (1 - alpha / 2)))]
-    lo = f"<{xc[0]:g}" if lo_v == NEG_INF else 2.0 ** lo_v
-    hi = f">{xc[-1]:g}" if hi_v == POS_INF else 2.0 ** hi_v
+    # P0: an endpoint may be censored in EITHER direction. Guarding only the
+    # "expected" side produced illegal intervals: all-below gave hi = 2**-inf
+    # = 0.0, and all-above gave lo = 2**+inf = inf. Both bounds must be mapped
+    # through the same open-bound rule.
+    def _bound(v, lo_side):
+        if v == NEG_INF:
+            return f"<{xc[0]:g}"
+        if v == POS_INF:
+            return f">{xc[-1]:g}"
+        return 2.0 ** v
+    lo = _bound(lo_v, True)
+    hi = _bound(hi_v, False)
     out = dict(pt)
     out["ci"] = (lo, hi)
     out["censor_frac"] = ncens / len(draws)
@@ -274,6 +296,89 @@ def _sse_one_seg(lx, ly):
     m = (n * sxy - sx * sy) / den
     c = (sy - m * sx) / n
     return sum((y - (m * xv + c)) ** 2 for xv, y in zip(lx, ly))
+
+
+def corrected_knee_ci(x: Grid, reps_int8_raw: Reps,
+                      x_penalty: Grid, reps_penalty: Reps,
+                      n_boot: int = 1000, alpha: float = 0.10,
+                      seed: int = 20260812, n_cand: int = 200):
+    """Divergence-onset (knee) on the PENALTY-CORRECTED B300 INT8 curve.
+
+    Section 1.0 locates the divergence onset with the knee estimator and
+    section 1 (H2) requires the B300 INT8 arm to be analysed on the corrected
+    curve, but until A-9 the module offered only corrected_crossover_ci and an
+    UNCORRECTED knee_ci, so those two requirements could not both be met. This
+    closes that gap with the same discipline as corrected_crossover_ci: the
+    penalty curve P is resampled inside every bootstrap draw, so penalty
+    uncertainty propagates into the onset interval rather than being ignored.
+
+    Returns the knee dict plus ci, noknee_frac, and
+    penalty_extrapolated_frac. Cells whose draw needed nearest-P
+    extrapolation are counted; per section 5 an onset resting on
+    extrapolated penalty must not enter H2 confirmation.
+    """
+    import random
+    rng = random.Random(seed)
+    logx_p = [math.log2(v) for v in x_penalty]
+
+    def correct(ra, pmeds):
+        out, extrap = [], False
+        for xi, row in zip(x, ra):
+            P, ex = _penalty_curve(logx_p, pmeds, math.log2(xi))
+            extrap |= ex
+            P = min(max(P, 0.0), 0.95)
+            out.append([v / (1.0 - P) for v in row])
+        return out, extrap
+
+    pmeds0 = [median(r) for r in reps_penalty]
+    corr0, extrap0 = correct(reps_int8_raw, pmeds0)
+    pt = knee(x, corr0, n_cand)
+    # A-9 guard, found by testing this function: a load-dependent P is itself a
+    # curved function of log-load, so dividing by (1-P) can MANUFACTURE a knee
+    # in a curve that has none. Verified: a pure power law x**0.8 that the raw
+    # estimator correctly calls 'no-knee' (sse_ratio 1.54) becomes 'knee' at
+    # 19.7 with sse_ratio 26.0 once a 0.05->0.60 penalty ramp is applied. The
+    # corrected onset is therefore reported alongside the raw verdict, and an
+    # onset that exists ONLY after correction is flagged: per section 5 it is a
+    # property of the penalty curve, not evidence of a mechanism transition,
+    # and must not be reported as a divergence onset.
+    raw_pt = knee(x, reps_int8_raw, n_cand)
+    if pt["status"] != "knee":
+        out = dict(pt)
+        out["penalty_extrapolated"] = extrap0
+        out["raw_status"] = raw_pt["status"]
+        return out
+
+    r = min(len(v) for v in reps_int8_raw)
+    draws, nk, nextrap = [], 0, 0
+    for _ in range(n_boot):
+        pm = [median([row[rng.randrange(len(row))] for _ in row])
+              for row in reps_penalty]
+        picks = [rng.randrange(r) for _ in range(r)]
+        rr = [[row[p] for p in picks] for row in reps_int8_raw]
+        rc, ex = correct(rr, pm)
+        nextrap += ex
+        kb = knee(x, rc, n_cand)
+        if kb["status"] == "knee":
+            draws.append(math.log2(kb["estimate"]))
+        else:
+            nk += 1
+    out = dict(pt)
+    out["noknee_frac"] = nk / n_boot
+    out["penalty_extrapolated_frac"] = nextrap / n_boot
+    out["penalty_extrapolated"] = extrap0
+    out["raw_status"] = raw_pt["status"]
+    out["onset_induced_by_penalty"] = raw_pt["status"] != "knee"
+    if out["onset_induced_by_penalty"]:
+        out["note"] = ("onset absent in the raw curve and present only after "
+                       "penalty correction: attribute to the shape of P, not "
+                       "to a mechanism transition; excluded from H2")
+    if draws:
+        draws.sort()
+        lo = draws[max(0, int(len(draws) * (alpha / 2)))]
+        hi = draws[min(len(draws) - 1, int(len(draws) * (1 - alpha / 2)))]
+        out["ci"] = (2.0 ** lo, 2.0 ** hi)
+    return out
 
 
 def knee(x: Grid, reps: Reps, n_cand: int = 200):

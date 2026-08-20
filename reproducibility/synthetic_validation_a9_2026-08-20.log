@@ -1,0 +1,38 @@
+=== changepoint v2 synthetic validation ===
+K {'med_err': 0.006143810225275992, 'coverage': 0.8833333333333333, 'knee_rate': 1.0}
+S1-G13 {'valid': 200, 'trials': 200, 'med_err': 0.02704758443047872, 'coverage': 0.93, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S1-G6 {'valid': 200, 'trials': 200, 'med_err': 0.020501893080915767, 'coverage': 0.92, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S1-G9 {'valid': 200, 'trials': 200, 'med_err': 0.029379208431344672, 'coverage': 0.935, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S1-G9-s10 {'valid': 200, 'trials': 200, 'med_err': 0.0505284851244161, 'coverage': 0.915, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S1-G9-s15 {'valid': 200, 'trials': 200, 'med_err': 0.08721175507135914, 'coverage': 0.915, 'wide_or_cens_frac': 0.25, 'two_cross_frac': 0.0}
+S1-G9r5 {'valid': 200, 'trials': 200, 'med_err': 0.0326266167322391, 'coverage': 0.905, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S10 {'valid': 200, 'trials': 200, 'med_err': 0.02386838802135749, 'coverage': 0.96, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S2 {'noncross_frac': 0.72, 'confident_false_frac': 0.015}
+S3 {'valid': 200, 'trials': 200, 'med_err': 0.03049795377678155, 'coverage': 0.885, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S4 {'valid': 200, 'trials': 200, 'med_err': 0.37821447968055466, 'coverage': 0.55, 'wide_or_cens_frac': 1.0, 'two_cross_frac': 0.305}
+S5 {'valid': 200, 'trials': 200, 'med_err': 0.105880584074316, 'coverage': 0.89, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S5-knee {'med_err': 0.14385618977472436, 'knee_rate': 1.0}
+S6 {'valid': 200, 'trials': 200, 'med_err': 0.01995750513482264, 'coverage': 0.96, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 1.0}
+S7 {'valid': 200, 'trials': 200, 'med_err': 0.02886975167427064, 'coverage': 0.92, 'wide_or_cens_frac': 0.0, 'two_cross_frac': 0.0}
+S8 {'coverage': 0.94}
+S9 {'noknee_frac': 0.98}
+--- acceptance ---
+ACCEPT K1: PASS
+ACCEPT K2: PASS
+ACCEPT S1-G13: PASS
+ACCEPT S1-G6: PASS
+ACCEPT S1-G9: PASS
+ACCEPT S1-G9-s10: PASS
+ACCEPT S1-G9-s15: PASS
+ACCEPT S1-G9r5: PASS
+ACCEPT S10: PASS
+ACCEPT S2: PASS
+ACCEPT S3: PASS
+ACCEPT S4: PASS
+ACCEPT S5: PASS
+ACCEPT S5-knee: PASS
+ACCEPT S6: PASS
+ACCEPT S7: PASS
+ACCEPT S8: PASS
+ACCEPT S9: PASS
+OVERALL: PASS

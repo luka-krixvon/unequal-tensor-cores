@@ -1,6 +1,6 @@
 # 預註冊 v3：H200×B300 量化格式 Crossover 量測研究
 
-**v3 鎖定日期：2026-08-13（Asia/Taipei）。本文件在任何目標硬體（H200/B300）數據存在之前鎖定。**
+**v3 鎖定日期：2026-08-13；A-8／A-9 落實修正 2026-08-20（Asia/Taipei）。本文件在任何目標硬體（H200/B300）數據存在之前鎖定。**
 v3 取代 v2（tag `prereg-v2-locked` 保存 v2 全文）：動因＝Codex 敵對審查（C1–C14，`notes/ADVERSARIAL_REVIEW.md`，SHA `bd6bba4722f28513`）及本專案對該審查的五線獨立覆核（數學重算、NVIDIA 一手文件、文獻、原始碼、GitHub pipeline）。全部修訂於任何目標硬體數據之前完成；變更清單見 A-4。
 v2 取代同日 v1：v1 完成後立即接受三線敵對審查（洩漏／估計器／可 game 性），審查發現 4 FATAL、17 MAJOR、6 MINOR，全部在收取任何數據之前修入該版。審查全文存於 workflow 紀錄。
 
@@ -12,13 +12,13 @@ v2 取代同日 v1：v1 完成後立即接受三線敵對審查（洩漏／估�
 
 | 檔案 | SHA-256[:16] | 角色 |
 |---|---|---|
-| `experiment/harness/changepoint.py` | `a8b58ce3859a544f` | 估計器 v2（censored-inclusive CI、多交叉回報、失敗規則、paired block bootstrap、knee 存在性檢定、penalty 傳播） |
-| `experiment/harness/validate_synthetic.py` | `6216d8c9e09088d0` | 驗收 v2（真實幾何 G13/G9/G9r5/G6、σ∈{.05,.10,.15}、S1–S10、K1–K2） |
-| `experiment/harness/gen_sweep.py` | `a77697682c3029f4` | sweep 展開器（A-7：矩陣路徑解析明示化＋執行時印出所讀矩陣之路徑與 SHA；展開邏輯未變） |
-| `experiment/config_matrix.csv` | `949d996a5c055e2e` | 實驗矩陣 v4（28 實驗、14,691 runs；v3 基礎上加入 REQUANT-B300-{DECODE,PREFILL} 診斷臂）。名目網格，實際執行受 §3.5 容量包絡裁切 |
-| `experiment/harness/capacity_envelope.py` | `580105ebb64e3018` | §3.5 容量包絡規則之實作（B_max、crop_grid、infeasible 記帳；含 self-test） |
+| `experiment/harness/changepoint.py` | `342d701fbef2a5c3` | 估計器（A-8：開界修正、bound 修正、lead_sign；A-9：corrected_knee_ci ＋ penalty-induced-onset 防護） |
+| `experiment/harness/validate_synthetic.py` | `d9a5cec3dd968900` | 驗收（A-8：SHA 導出 seed、非零 exit、S2 docstring 對齊實作） |
+| `experiment/harness/gen_sweep.py` | `eb9d19472e332066` | sweep 展開器（A-8：shape 家族依宣告 model、data_role、fail-closed；A-9：off-grid 標記含 M 軸、split 軸前綴、H200-NVFP4 降級） |
+| `experiment/harness/capacity_envelope.py` | `ce812aa8ec545692` | 容量包絡（A-8：run-spec 鍵正規化、ISL+OSL、KV block 進位、TP 分片、paired_feasible ＋ ledger） |
+| `experiment/harness/quality_gates.py` | `f7c5032017540b68` | quality gates（A-8：部分執行不得 PASS、參照 JSON 驗證、prompt 數不符即停、GPT-2 revision 釘定、失敗非零 exit） |
+| `experiment/config_matrix.csv` | `17d20f1db167d994` | 實驗矩陣 v5（30 實驗、19,233 runs；A-9：off-grid 三軸、REQUANT prefill 補至 6 點、H4-SLO 兩列） |
 | `experiment/harness/qwen3_32b_config.json` | `97e295b632839357` | 主模型架構參數 |
-| `experiment/harness/quality_gates.py` | `41b922dd7d2ce1d5` | §7 三個 quality gates 之實作（PPL／一致率／needle；含 A-3 之窗口切分規則） |
 
 驗證設定聲明：crossover 覆蓋率以鎖定之 B=1000 驗證；knee-CI 與 penalty 情境以 B=300、60–100 trials 驗證（覆蓋率標準誤 4–6%，驗收帶已吸收），此為預先聲明的驗證設定。
 
@@ -94,7 +94,7 @@ Predictor ＝ **確定性機制模型，無可調超參數**：對每（hardware
 - Held-out 格點若依 §3.5 落入容量不可行域：記錄為 infeasible、自評分分母剔除、計數列報（不以任何方式替換或移點——替換即洩漏選點自由度）。
 
 ### 3.4 405B 端到端選點（規則現鎖）
-每（hardware, crossover pair, phase）：以凍結後 predictor 的 x̂* 為中心，取 **7 個 log-uniform 點於 [x̂*/4, x̂*×4]**（裁剪至可行域），**加 4 個固定錨點**（decode: concurrency {8, 64, 224}；prefill: batch {2, 24}——與任何 hold-out 值不重合），使嚴重誤預測可被觀測。全部點列入 Freeze Amendment。
+每（hardware, crossover pair, phase）：以凍結後 predictor 的 x̂* 為中心，取 **7 個 log-uniform 點於 [x̂*/4, x̂*×4]**（〔A-8 釐清：此處「裁剪至可行域」僅指**事前選點**時將區間端點限制於 §3.5 可行域內，屬選點規則；與 §3.3「held-out 格點落入不可行域不得替換或移點」不衝突——後者管的是**事後**發現不可行的既有格點。兩者不得互相援引。〕），**加固定錨點**（decode: concurrency {8, 64, 224}＝3 點；prefill: batch {2, 8}＝2 點。〔A-8 修正：v3 誤寫「4 個」，且 prefill 錨點 24 與 §3.3 之 prefill batch hold-out {3,12,24} 重合，違反同句「與任何 hold-out 值不重合」；24→8。〕），使嚴重誤預測可被觀測。全部點列入 Freeze Amendment。
 
 ### 3.5 容量可行性包絡（v3 新增）
 
@@ -105,6 +105,10 @@ Predictor ＝ **確定性機制模型，無可調超參數**：對每（hardware
 - 兩臂之可行域可能**因格式而異**（BF16 權重臂 vs W8 臂）：配對分析僅於兩臂交集可行域內進行；差集格點列報但不進入 crossover 估計。
 
 ## 4. Baselines（可唯一重實作）
+
+**政策類定義（A-8 補；v3 使用 Π₂ 但從未定義）**：政策 π 將 (phase, load regime) 映至 (format, config)。**Π₀**＝π 為常數（每 hardware 單一 format，config 亦固定）；**Π₁**＝π 僅依 phase；**Π₂**＝π 依 phase×regime，regime＝§1 之 log₂(load) 分箱。三類共用同一 action set、同一 SLO 與 quality-gate 約束，故 Π₀⊆Π₁⊆Π₂。
+**共同 support**：各類之 oracle 僅在**所有候選 format 皆通過 §7 gates 且皆落在 §3.5 兩臂交集可行域**的格點上評估；被排除格點逐一列報，不得只報存活格點的差距。
+**完全平手**：若兩 format 之中位吞吐差的配對 bootstrap 90% CI 含 0，oracle 取**字典序在前**之 format（確定性 tie-break，避免 oracle 借平手取得虛假優勢），並計入 tie 計數。
 
 - **B1 全域單一格式（Π₀）**：每 **hardware**，對該硬體 QWEN-{PREFILL,DECODE} **兩個 phase 聯集**之全部 TRAINING-ELIGIBLE 格點，取**中位吞吐之幾何平均**最高的**單一格式**（跨 phase 共用同一格式）。〔v3 修正：v2 誤寫為「每 hardware×phase」，使 B1 與 B2 不可區分、Π₀→Π₁ gap 不可估——Codex 審查 C5 指出。〕
 - **B2 phase-only（Π₁）**：同 B1 聚合，惟每 **hardware×phase** 各自選格式。
@@ -207,3 +211,41 @@ v1→v2 全面修訂，動因＝預資料敵對審查（4 FATAL/17 MAJOR/6 MINOR
 
 ### A-7（A 類，2026-08-14，缺陷修復）
 `gen_sweep.py` 重釘為 `a77697682c3029f4`（原 `6198eb61a6cf3f71`）。**動因＝實際發現的靜默錯誤輸入缺陷**：原程式寫死 `MATRIX = HERE/../config_matrix.csv`（配合 repo 之 `experiment/harness/` 佈局）；在扁平部署（代理 VM 的工作目錄）中 `..` 解析至無關目錄，讀到一份 2026-08-12 遺留的 v3 舊矩陣（26 列、`a99071715d5e5992`），產生 14,451 runs 而非 v4 的 14,691——**且所有 SHA 檢查皆通過，因為被檢查的檔案不是被讀取的那一份**。修法：路徑解析改為「先同目錄、再上層」，且每次執行印出實際所讀矩陣之絕對路徑與 SHA-256[:16]。展開邏輯一字未動，同一矩陣之輸出不變（本機重跑仍為 14,691，矩陣 SHA 印為 `949d996a5c055e2e`）。舊矩陣殘留已自 VM 移除。教訓：SHA 釘定只在「被釘的檔案就是被讀的檔案」時有效；凡讀取外部輸入之腳本，執行時必須自報所讀路徑與雜湊。
+
+### A-8（A 類，2026-08-20，落實缺陷修正；尚無任何目標硬體數據）
+外部覆核（Codex，18 項）經本專案逐項獨立重現後，確認 v3 存在**「文字已修、程式未修」**一類的落實缺陷。全部修正於任何目標硬體數據之前完成，故仍屬 A 類；但其中三項改變已發布的產物，必須明記：
+
+1. **shape hold-out 洩漏仍在（最嚴重）**。v3 將 MICRO 拆為 -QWEN／-405B 並在 §3.1／§3.2 宣告修好了 shape 洩漏，但 `gen_sweep.py` 的展開條件是 `tier == "mechanism"`，導致：每個 MICRO-*-QWEN（標記 TRAINING-ELIGIBLE）**同時展開 Qwen 與 Llama-405B shapes**，其 3,640 筆中 1,820 筆正是預註冊的 shape hold-out；而 MICRO-*-405B（標記 HELD-OUT）因 tier 不同而**完全沒有 shape 欄**，只產生 364 筆字串規格。修正後改由該列宣告的 model 欄決定 shape 家族。**run count 由 14,691 變為 13,235**（MICRO-*-QWEN 3,640→1,820；MICRO-*-405B 364→1,456）。§0 之 matrix SHA 不變（矩陣未改），`gen_sweep.py` SHA 須重釘。
+2. **data-role 防火牆此前只存在於散文**。生成的 JSONL 沒有任何 role 或 hold-out 標記，ISL=8192 與訓練格點同檔，§3.3 的 off-grid 值 {3,12,48,192,…} 從未被產生。修正後每筆 spec 帶 `data_role`，落入逐軸 hold-out 桶者另帶 `heldout_reason`。off-grid 值之實際產生需改矩陣，列為未決（見下）。
+3. **A-7 只做到可見性、未 fail-closed**。`gen_sweep.py` 印出所讀矩陣的 SHA 但從不與鎖定值比較。修正後 SHA 不符即拒跑（`GEN_SWEEP_ALLOW_UNPINNED=1` 為刻意覆寫，須另記 amendment）。
+4. **估計器產生非法區間**。`crossover_ci` 僅對「預期方向」做開界保護：全 below 時 hi＝2^(−∞)＝0.0，全 above 時 lo＝2^(+∞)＝inf。已重現 `ci=(inf, ">16")`。修正為兩端共用同一開界規則。
+5. **`no-crossing-indicated` 被誤附方向 bound**。原三元式在該狀態下回傳 `xc[-1]`，與 `above` 同值，等於斷言了該狀態存在目的正是要保留的方向。修正為僅 below/above 帶 bound；另新增 `lead_sign`（兩端點各自的領先方向），因 below/above 僅編碼交叉落在網格哪一側、**不含勝者資訊**。
+6. **驗收套件不可重現**。`validate_synthetic.py` 以 `hash(name)` 為 seed，而 `hash()` 逐行程加鹽（PYTHONHASHSEED），故 A-2 所引的 19/19 結果**無法由釘定的 SHA 重現**（已實測兩次得不同 seed）。改用 SHA-256 導出 seed。同時：OVERALL FAIL 現在回傳非零 exit code；S2 的 docstring 與實作不一致（宣稱 non-crossing ≥90%，實作限制 confident-false ≤10%）已改為以實作為準的表述。**A-2 的驗證數字須以新 seed 重跑並取代**，舊數字保留於歷史並標明不可重現。
+7. **容量包絡未接入 pipeline**。`crop_grid` 要求整數鍵，而 `gen_sweep` 輸出 `load='concurrency=1'`、`isl='128'` 字串；且未做兩臂交集、未計 decode 之 ISL+OSL、未做 KV block 進位、未處理 TP 分片。修正後可直接消化 run spec，並新增 `paired_feasible()` 回傳交集與 dropped-cell ledger。
+8. **quality gates fail-open**。任意 `--gates`／`--limit-*` 子集仍可輸出 `ALL_GATES_PASS=true`；參照 JSON 未驗 role／語料 digest／prompt digest；`agree_score` 以 `zip` 靜默截短；GPT-2 tokenizer revision 未釘；gate 失敗 exit 0。均已修正（部分執行標記 `full_protocol_run=false` 且不得為 PASS）。
+9. **Π₂ 未定義**：v3 在 §6 與 A-4 使用 Π₂ 卻從未定義三類；已於 §4 補上定義、共同 support 與確定性 tie-break。
+10. **§3.4 錨點數與重合**：v3 寫「4 個固定錨點」但實列 decode 3 點、prefill 2 點，且 prefill 錨點 24 與 §3.3 之 hold-out {3,12,24} 重合，違反同句約束；已改為 3+2 並將 24→8。§3.3 與 §3.4 對「裁剪／不得移點」的表面衝突已加釐清語。
+
+**時間戳更正（不改協定，更正紀錄）**：`prereg-v3-locked` 的 Release created_at 為 **2026-08-13T07:19:41Z**（published 07:20:01Z）；05:56:59Z 屬 `prereg-v2-locked`。2026-08-18 之覆核 prompt 曾將 v2 時間戳誤植於 v3，decision log 之原始記載正確。另：`prereg-v3-locked` 為 **unsigned** annotated tag，而 §1.2 要求 Predictor Freeze 之時間戳為 **signed tag 或 OSF registration**；unsigned tag + Release 可證存在時點，但**不滿足 §1.2 的簽章要求**。Predictor Freeze 執行前必須先設定簽章或改用 OSF，否則該次凍結無效。
+
+**仍未決（需使用者裁決，未含於本次修正）**：§3.3 off-grid 值之矩陣實作（改 run count）；H4 open-loop 協定與矩陣列（缺 arrival process／utilization／分母）；H200 NVFP4 臂之四元組合法性（Hopper 無原生 FP4 pipe，恐使 H2 之 NVFP4 側比較不同執行路徑）；REQUANT-B300-PREFILL 僅 3 個 load 點而估計器需 ≥5；C9 之 fallback-path penalty 可否作主歸因（或僅能作敏感度上界）。
+
+### A-9（A 類，2026-08-20，A-8 之後續：使用者裁決之五項設計決定）
+仍為預資料（已確認 `sweeps/` 僅含 spec、無任何 result；VM 上無 H200/B300 量測）。五項決定由專案負責人裁定後實作：
+
+1. **§3.3 的 off-grid hold-out 值現在真的產生**。decode `concurrency {3,12,48,192}`、prefill `batch {3,12,24}`、MICRO `active_tokens {3,12,48,192,768,3072}` 進入矩陣，並由 `gen_sweep` 自動標記 `data_role=HELD-OUT` 與 `heldout_reason=off-grid-<axis>-<value>`。此前這些值只存在於協定文字，load 軸完全沒有 off-grid 泛化測試。
+2. **NVFP4 邊界改為 B300-only**。Hopper 無原生 FP4 tensor-core pipe，故 H200 上的「NVFP4」必然是 dequant→BF16 執行，與 B300 的 native NVFP4 屬不同之 §5.5 四元組。H200 的 2,172 個 NVFP4 格點改標 `data_role=DIAGNOSTIC-CAPABILITY`、`diagnostic_reason=h200-nvfp4-no-native-fp4-pipe`，**不進入 H2、H3 或 NVFP4 邊界估計**，僅作 capability-boundary 診斷（保留其吞吐與執行路徑紀錄，因對從業者有用）。H2 之 NVFP4 側因此為單硬體邊界，不含跨硬體位移。
+3. **REQUANT-B300-PREFILL 由 3 點補至 6 點**（batch 1|2|4|8|16|32），超過 `MIN_GRID=5`，該診斷臂方能產出邊界估計。
+4. **新增 `corrected_knee_ci`**（changepoint.py）：P 於每個 bootstrap draw 內重抽後才做 knee 估計，使 §1.0 之「divergence-onset 由 knee 定位」與 §1 H2 之「B300 INT8 側用 corrected 曲線」首次能同時滿足。
+   **本函式測試時發現之危害，已加防護並在此登記**：隨負載變化的 P 本身是 log-load 的曲線函數，除以 (1−P) 會**製造 knee**。實測純冪律 x^0.8 由 `no-knee`（sse_ratio 1.54）在 0.05→0.60 之 penalty ramp 下變為 `knee` at 19.7（sse_ratio 26.0）。防護：同時回報 `raw_status`，並以 `onset_induced_by_penalty` 標記僅在校正後出現之 onset——該類 onset 為 P 曲線之性質而非機制轉折，**排除於 H2 確證**。已驗證可區分（純冪律 True、真 roofline False）。
+5. **H4 open-loop 進矩陣**：新增 `H4-SLO-{H200,B300}`。到達過程＝Poisson 與二態 MMPP，各三個**絕對到達率**（poisson/mmpp2 @ 2.0、4.0、6.0 req/s）。**兩臂吃完全相同的請求流**（絕對到達率，非各格式按自身 capacity 對齊 ρ），故 goodput 之分母相同、可直接相減；SLO-A 與 SLO-B 皆須報告。屬 EXCLUDED-FROM-PREDICTOR。
+
+**另修兩項 A-8 未捕捉之缺陷**（皆由外部審查指出、於 A-9 實作時經實測確認）：
+- `split()` 僅在第一個元素保留軸前綴（`"batch=1|2|4"` → `["batch=1","2","4"]`），使所有解析 `axis=value` 的下游（hold-out 標記、容量包絡）每列只看得到一個帶軸的格點。實際後果：A-9 第 1 項的 off-grid 值加入矩陣後**仍未被標記**，直到修正 `split()` 才出現 `off-grid-concurrency-*` 與 `off-grid-batch-*`。
+- H4 新列未進 `DATA_ROLE` 表，產生 252 個 `UNASSIGNED`；已補，現為 0。
+
+**run count 變更**：14,691（v3，含洩漏）→ 13,235（A-8 修正洩漏後）→ **19,233**（A-9 加入 off-grid、H4、REQUANT 補點）。data_role 分佈：HELD-OUT 8,774／TRAINING-ELIGIBLE 7,098／DIAGNOSTIC-CAPABILITY 2,172／EXCLUDED-FROM-PREDICTOR 909／CALIBRATION-ONLY 189／DIAGNOSTIC-POST-FREEZE 49／GATE 42；UNASSIGNED 0。公開 repo 之 README 與 v3 Release 所載 14,691 為 v3 當時之值，不追改，由本修訂記錄其變更。
+
+**A-2 驗證數字取代（重要）**：A-2 所引之 19/19 係以 `hash(name)` 為 seed 取得，而 `hash()` 逐行程加鹽，故**該組數字無法由釘定的 SHA 重現**（已實測同一輸入兩次得 7589 與 19781）。A-9 以 SHA-256 導出之固定 seed 重跑，仍為 **19/19 全過**（`reproducibility/synthetic_validation_a9_2026-08-20.log`）：S1 六幾何誤差 0.027–0.089／覆蓋 0.90–0.96；S2 自信假交叉 0.015；S3 0.028；S4 近切線 100% 帶旗標（文件化解析度極限）；S5 0.119／knee 偏差 0.144；S6 雙交叉偵測 1.00、首交叉誤差 0.020；S7 覆蓋 0.94；S8 penalty 傳播覆蓋 0.94；S9 純冪律 no-knee 0.98；S10 近邊緣覆蓋 0.96；K1／K2 達標。**已驗證跨機器可重現**（本機與 `gpu-worker-A` 之 S1-G13 輸出逐位相同）。A-2 之舊數字保留於歷史並在此標明不可重現，不得再作為驗證證據引用。
+
+**§1.2 簽章缺口（未解決，Predictor Freeze 前必須處理）**：`prereg-v3-locked` 為 **unsigned** annotated tag（GitHub API `verification.verified=false, reason=unsigned`），而 §1.2 明文要求「推送至公開 git remote 的 **signed tag**，或 OSF registration」。unsigned tag ＋ Release 可證存在時點（v3 Release created_at 2026-08-13T07:19:41Z），但**不滿足 §1.2 之簽章要求**。Predictor Freeze 執行前須先設定 GPG／SSH 簽章或改用 OSF，否則該次凍結按本協定無效。另更正：2026-08-18 之覆核 prompt 曾將 `prereg-v2-locked` 的 05:56:59Z 誤植為 v3 之時間戳；decision log 原始記載正確。

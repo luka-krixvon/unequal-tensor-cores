@@ -39,6 +39,7 @@ DATASET = ("Salesforce/wikitext", "wikitext-2-raw-v1", "test",
            "b08601e04326c79dfdd32d625aee71d232d685c3")
 PPL_WINDOW = 4096
 AGREE_WINDOW, AGREE_PROMPT, AGREE_GEN, AGREE_N = 320, 64, 256, 200
+GPT2_REVISION = "607a30d783dfa663caf39e06633721c8d4cfcd7e"  # openai-community/gpt2 main @ pin
 NEEDLE_SENT = "The secret checkpoint code is 731942."
 NEEDLE_Q = "What is the secret checkpoint code?"
 NEEDLE_ANS = "731942"
@@ -71,7 +72,8 @@ def load_corpus():
 
 def gpt2_tokenizer():
     from transformers import AutoTokenizer
-    return AutoTokenizer.from_pretrained("gpt2")
+    # Revision pinned: the windowing tokenizer must not drift.
+    return AutoTokenizer.from_pretrained("gpt2", revision=GPT2_REVISION)
 
 
 def build_agree_prompts(text, tok, n=AGREE_N, limit=None):
@@ -145,6 +147,12 @@ def gate_agree(llm, prompts):
 
 def agree_score(ref_ids, cand_ids):
     """Mean over prompts of (matched tokens before first divergence)/AGREE_GEN."""
+    # P0: zip() silently truncated to the shorter list, so a reference with
+    # fewer prompts than the candidate produced a score over a smaller,
+    # unreported denominator.
+    if len(ref_ids) != len(cand_ids):
+        raise SystemExit(f"prompt-count mismatch: reference has {len(ref_ids)},"
+                         f" candidate has {len(cand_ids)}")
     per = []
     for r, c in zip(ref_ids, cand_ids):
         m = 0
@@ -242,7 +250,31 @@ def main():
                                  "agree_min": agree_min,
                                  "needle_max_drop_pts": drop_max}
         passes = [v for k, v in verdict.items() if k.endswith("_pass")]
-        verdict["ALL_GATES_PASS"] = bool(passes) and all(passes)
+        # P0: ALL_GATES_PASS previously became true after running any subset of
+        # gates on any subset of prompts. A partial run can never be a pass.
+        full_run = (set(gates) == {"ppl", "agree", "needle"}
+                    and not args.limit_prompts and not args.limit_needle)
+        verdict["full_protocol_run"] = full_run
+        verdict["ALL_GATES_PASS"] = bool(passes) and all(passes) and full_run
+        if not full_run:
+            verdict["note"] = ("PARTIAL RUN -- not a protocol verdict; "
+                               "section 7 requires all three gates over the "
+                               "full prompt and needle sets")
+        # P0: the reference JSON was trusted blindly. A candidate scored
+        # against the wrong reference (different dataset revision, prompt set,
+        # parent model, or role) silently produces a meaningless verdict.
+        for field, want in (("role", "reference"),):
+            if ref.get(field) != want:
+                raise SystemExit(f"reference JSON has {field}={ref.get(field)!r},"
+                                 f" expected {want!r}")
+        if ref.get("dataset", {}).get("sha256_16") != res["dataset"]["sha256_16"]:
+            raise SystemExit("reference and candidate saw different corpora "
+                             f"({ref.get('dataset',{}).get('sha256_16')} vs "
+                             f"{res['dataset']['sha256_16']})")
+        if ("agree" in gates and "agree_prompts_sha256_16" in ref
+                and ref["agree_prompts_sha256_16"]
+                != res.get("agree_prompts_sha256_16")):
+            raise SystemExit("reference and candidate used different prompts")
         res["verdict"] = verdict
 
     with open(args.out, "w") as f:
@@ -252,7 +284,11 @@ def main():
                                          "needle": res.get("needle", {}).get("pass_rate_pct")}),
                      indent=2))
     print(f"[quality_gates] wrote {args.out}")
+    # P0: a failed gate must fail the process so a runner can block on it.
+    if args.role == "candidate" and not res["verdict"].get("ALL_GATES_PASS"):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
